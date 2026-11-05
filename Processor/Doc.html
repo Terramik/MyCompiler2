@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Processor Documentation</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+          max-width: 40rem;
+          margin: 2rem auto;
+          padding: 0 1rem;
+          font: 16px/1.6 system-ui, sans-serif;
+          background: #111;
+          color: #ddd;
+        }
+        a { color: #6cf; }
+        code, pre { background: #1c1c1c; padding: .1em .3em; border-radius: 4px; }
+        img, video { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+
+<details>
+    <summary>Базовые описание</summary>
+    <p>Это описание моего 32-битного процессора.</p>
+    <p>
+        Байт - 8 бит. Слово - 4 байта. Адресация побайтовая. Little-endian. 16 регистров.
+        Отрицательные числа на основе дополнительного кода. Невыровненный доступ в RAM запрещён(нарушение - падение).
+    </p>
+
+    <p>
+        Для VM будут не все 4 гб памяти, а только 16 мб(до 0xffffff байт)(выход за границы - падение)
+        Также, байт-код должен быть выровнен(он начинается с 0xfff0 и увеличивается), адреса 2-байтовых команды должен
+        быть кратен 2, адреса 4 и 8 байтовых - 4.
+    </p>
+
+
+    <p>Особые регистры. Особые они тем, что с ними работают некоторые команды, в остальном они обычные.</p>
+    <table>
+        <caption>Особые регистры</caption>
+        <thead>
+            <tr>
+                <th>Индекс регистра</th>
+                <th>Имя</th>
+                <th>Значение при старте</th>
+                <th>Описание</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>r15</td>
+                <td>CP</td>
+                <td>0xfff0</td>
+                <td>Адрес следующей исполняемой команды</td>
+            </tr>
+            <tr>
+                <td>r14</td>
+                <td>FL</td>
+                <td>0</td>
+                <td>Флаги, описывающие состояние числа(обновляется COMP), с ним работают прыжки</td>
+            </tr>
+            <tr>
+                <td>r13</td>
+                <td>SF</td>
+                <td>0x0ff0</td>
+                <td>Stack frame, нужен для работы со стеком вызовов и переменными</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>FL, что будет помещать сюда COMP(и пара других при выполнении.</p>
+    <table>
+        <caption>FL</caption>
+        <thead>
+            <tr>
+                <th>Индекс бита</th>
+                <th>Имя</th>
+                <th>Описание</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>0</td>
+                <td>ZR</td>
+                <td>zero все биты числа - 0</td>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>PS</td>
+                <td>positive, для знаковых, знаковый бит(старший) - 0</td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td>CR</td>
+                <td>carry, вынесенный(или выдвинутый) бит, он особый,т.к. устанавливается
+                    OP: ADD, SHL, SHR а не COMP, COMP оставит его прежнем</td>
+            </tr>
+        </tbody>
+    </table>
+
+</details>
+
+<details>
+    <summary>Команды</summary>
+
+    <p>В описаниях команд присутствует некая доля синтаксических сахаров, что по идеи должно относиться к ассемблеру, но...</p>
+
+    <details>
+        <summary>Данные</summary>
+        <p>Команды состоят из 2 вещей - оп-кода и аргументов, оп-код всегда занимает 1 байт, а аргументы зависят от команды</p>
+
+        <p>
+            В описания аргументов есть логика, это: <code>&lt;имя&gt;_&lt;тип&gt;</code>.
+            <code>&lt;имя&gt;</code> - это просто строка, идентификатор.
+            <code>&lt;тип&gt;</code> - имеет несколько типов.
+        </p>
+        <ul>
+            <li><code>r</code> - регистр, 4 бита</li>
+            <li><code>u&lt;рязмер&gt;</code> - беззнаковое число длинной в <code>&lt;рязмер&gt;</code> бит</li>
+            <li><code>i&lt;рязмер&gt;</code> - знаковое число длинной в <code>&lt;рязмер&gt;</code> бит</li>
+            <li><code>en</code> - строка-тип перечисления для определения конкретной команды, 0 бит.
+                Также в них будет написан оп-код для конкретной команды.</li>
+        </ul>
+        <p>
+            Также есть <code>_&lt;рязмер&gt;</code> - это неиспользуемое пространство в <code>&lt;рязмер&gt;</code> бит.
+        </p>
+
+
+        <p>Расположение команды: сначала идёт оп-код, потом её аргументы.</p>
+    </details>
+
+    <details>
+        <summary>Особое</summary>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Оп-код</th>
+                    <th>Имя</th>
+                    <th>Аргументы</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0x10</td>
+                    <td>STOP</td>
+                    <td></td>
+                    <td>Останавливает процессор</td>
+                </tr>
+                <tr>
+                    <td>0x11</td>
+                    <td>PASS</td>
+                    <td></td>
+                    <td>Ничего не делает, переходит к следующей команде, нужен для выравниваний.</td>
+                </tr>
+            </tbody>
+        </table>
+    </details>
+
+    <details>
+        <summary>Работа с регистрами</summary>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Оп-код</th>
+                    <th>Имя</th>
+                    <th>Аргументы</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0x20</td>
+                    <td>MOVE</td>
+                    <td>dest_r src_r</td>
+                    <td>Копирует из src в dest</td>
+                </tr>
+                <tr>
+                    <td>0x21</td>
+                    <td>COMP</td>
+                    <td>src_r _4</td>
+                    <td>Обновляет флаги исходя из значения в src</td>
+                </tr>
+                <tr>
+                    <td>-</td>
+                    <td>OP</td>
+                    <td>type_en r1_r r2_r</td>
+                    <td>См. в описании OP.</td>
+                </tr>
+                <tr>
+                    <td>0x2c</td>
+                    <td>CONST</td>
+                    <td>dest_r _20 val_u32</td>
+                    <td>Записывает в dest константу val</td>
+                </tr>
+                <tr>
+                    <td>0x2d</td>
+                    <td>CONST_HALF</td>
+                    <td>dest_r _4 val_u16</td>
+                    <td>Записывает в dest(с младшего байта) константу val</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table>
+            <caption>OP</caption>
+            <thead>
+                <tr>
+                    <th>Оп-код</th>
+                    <th>Имя</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0x22</td>
+                    <td>ADD</td>
+                    <td>r1 += r2</td>
+                </tr>
+                <tr>
+                    <td>0x23</td>
+                    <td>ADD_M</td>
+                    <td>add multiword, для многословного сложения: r1 += r2 + CR</td>
+                </tr>
+                <tr>
+                    <td>0x24</td>
+                    <td>SUB</td>
+                    <td>r1 -= r2</td>
+                </tr>
+                <tr>
+                    <td>0x25</td>
+                    <td>NEG</td>
+                    <td>r1 = -r2</td>
+                </tr>
+                <tr>
+                    <td>0x26</td>
+                    <td>AND</td>
+                    <td>r1 &= r2</td>
+                </tr>
+                <tr>
+                    <td>0x27</td>
+                    <td>OR</td>
+                    <td>r1 |= r2</td>
+                </tr>
+                <tr>
+                    <td>0x28</td>
+                    <td>XOR</td>
+                    <td>r1 ^= r2</td>
+                </tr>
+                <tr>
+                    <td>0x29</td>
+                    <td>NOT</td>
+                    <td>r1 = ~r2</td>
+                </tr>
+                <tr>
+                    <td>0x2a</td>
+                    <td>SHL</td>
+                    <td>r1 = r2 << 1</td>
+                </tr>
+                <tr>
+                    <td>0x2b</td>
+                    <td>SHR</td>
+                    <td>r1 = r2 >> 1</td>
+                </tr>
+            </tbody>
+
+        </table>
+
+        <p>ADD, SHL, SHL будут обновлять CR в FL, это будет перенесённый бит или выдвинутый.</p>
+        <pre>
+OP XOR r0 r0
+MOVE r1 r0
+OP ADD r1 r0</pre>
+
+    </details>
+
+    <details>
+        <summary>Работа с RAM</summary>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Оп-код</th>
+                    <th>Имя</th>
+                    <th>Аргументы</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>-</td>
+                    <td>LOAD</td>
+                    <td>size_en dest_r src_ptr_r</td>
+                    <td>В dest записывает данные из RAM по адресу src_ptr_r, size - размер</td>
+                </tr>
+                <tr>
+                    <td>-</td>
+                    <td>SAVE</td>
+                    <td>size_en dest_ptr_r src_r</td>
+                    <td>В RAM по адресу dest_ptr_r записывает данные из dest</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table>
+            <caption>SIZE</caption>
+            <thead>
+                <tr>
+                    <th>Оп-код для LOAD</th>
+                    <th>Оп-код для SAVE</th>
+                    <th>Имя</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0x30</td>
+                    <td>0x33</td>
+                    <td>BYTE</td>
+                    <td>Работает с младшим байтом, любой адрес, байт кладётся в младший байт регистра, остальное - 0.</td>
+                </tr>
+                <tr>
+                    <td>0x31</td>
+                    <td>0x34</td>
+                    <td>HALF</td>
+                    <td>Работает с 2 байтами от младшего, адрес кратен 2, кладётся от младшего бита регистра, остальное - 0.</td>
+                </tr>
+                <tr>
+                    <td>0x32</td>
+                    <td>0x35</td>
+                    <td>WORD</td>
+                    <td>Работает со словом, адрес кратен 4.</td>
+                </tr>
+        </table>
+
+        <pre>
+LOAD BYTE r0 r10
+SAVE HALF r1 r10
+LOAD WORD r2 r10</pre>
+
+    </details>
+
+    <details>
+        <summary>Прыжки</summary>
+
+        <p>Прыгает в зависимости от регистра <code>FL</code></p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Оп-код</th>
+                    <th>Имя</th>
+                    <th>Аргументы</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>-</td>
+                    <td>JUMP</td>
+                    <td>condition_en _24 dist_i32</td>
+                    <td>Перемещает(относительно текущего CP) CP на dist при выполнении condition(см. Conditions)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table>
+            <caption>Conditions</caption>
+            <thead>
+                <tr>
+                    <th>Оп-код</th>
+                    <th>Имя</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0x40</td>
+                    <td>NO</td>
+                    <td>Всегда</td>
+                </tr>
+                <tr>
+                    <td>0x41</td>
+                    <td>CR</td>
+                    <td>CR</td>
+                </tr>
+                <tr>
+                    <td>0x42</td>
+                    <td>NC</td>
+                    <td>not CR</td>
+                </tr>
+                <tr>
+                    <td>0x43</td>
+                    <td>ZR</td>
+                    <td>Есть флаг ZR</td>
+                </tr>
+                <tr>
+                    <td>0x44</td>
+                    <td>NZ</td>
+                    <td>not ZR</td>
+                </tr>
+                <tr>
+                    <td>0x45</td>
+                    <td>GT</td>
+                    <td>not ZR and PS</td>
+                </tr>
+                <tr>
+                    <td>0x46</td>
+                    <td>GE</td>
+                    <td>PS</td>
+                </tr>
+                <tr>
+                    <td>0x47</td>
+                    <td>LT</td>
+                    <td>not ZR and not PS</td>
+                </tr>
+                <tr>
+                    <td>0x48</td>
+                    <td>LE</td>
+                    <td>not PS or ZR</td>
+                </tr>
+                <tr>
+                    <td>0x49</td>
+                    <td>IF</td>
+                    <td>FL это не 0</td>
+                </tr>
+        </table>
+    </details>
+
+</details>
+
+<details>
+    <summary>Также</summary>
+
+    <p>CONST и JUMP имеют большие пустые пространства, так что мы имеете права удлинять и
+        сокращать их, если сможете это устроить.</p>
+    <p>Тут нет PUSH/POP/SP потому что я собираюсь работать через SF(как точку отчёта) откуда со смещениями я смогу
+        обратиться к любому адресу(что будет адресами переменной) включая место для нового SF в случае вызова новой функции.
+        А сами смешения будут за хардкожены в функции при компиляции.</p>
+    <p>Также, поэтому нету прерываний(хотя, над ними ещё нужно подумать) и вызовов функций, потому что их можно сделать
+        на основе тоже, что уже есть, и я хочу пострадать когда буду писать высокоуровневый компилятор.</p>
+    <p>IO пока тоже нет, думаю сделать его на прерываниях и/или особых местах в RAM, но это потом.</p>
+    <p>У меня есть большие сомнения по поводу FL и всех условных переходов при работе с многословными или не
+        полно словными(длинной точно в 4 байта) числами, и также знаковыми числами. Так что я подумал что будут сам
+        класть(или не класть) в FL 0 или 1, и использовать IF для перехода в случае работы с ними, а остальные флаги
+        нужны для работы с 1 словными числами. </p>
+
+
+</details>
+
+</body>
+</html>
