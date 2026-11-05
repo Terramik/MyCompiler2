@@ -1,0 +1,41 @@
+
+
+alias op1 r0 # operand 1
+alias op2 r1
+alias result r2
+
+# задаём штуки
+const op1 12
+const op2 17
+op xor result result  # x^x=0
+
+# скопируем, чтобы лучше смотреть результат в регистрах
+move r3 op1
+move r4 op2
+
+
+# основной цикл
+label loop_start
+    # мы выдвигаем младший бит
+    op shr op1 op1
+
+    # если выдвинутый бит - 0, то пропускаем сложение
+    jump NC skip_addition
+
+    # в противном случае - выполняем сложение
+    op add result op2
+
+    label skip_addition
+
+    # сдвигаем op2 для следующего цикла
+    op shl op2 op2
+
+    # проверяем что op это не 0
+    COMP op1
+
+    # если не 0 - продолжаем
+    jump nz loop_start
+
+# в противном случае всё
+stop
+
